@@ -16,3 +16,7 @@ then to upload those, then to pass the index pages to the script and upload them
 
 This is confusing because I was confused.  The hope is to produce an immutable index
 of the messages.
+
+The process after downloading is bundled into the untested `archive_month.bash`
+script, which takes a path to a subfolder within
+lists.cpunks.org/pipermail/cypherpunks/* as an argument.
