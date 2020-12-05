@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-echo 'WIP.  Just outputs debugging information now, without doing anything.'
+echo 'TODO: output file with mutated name'
 
 address='12pfsqGm1Uc76BLbpUdR47jJehmwhThYck'
 
@@ -52,23 +52,35 @@ is_relative() {
     [ "${path#/}" = "$path" ]
 }
 
-cat "$1" | preprocess | filter_links | extract_links | while read link
-do
-    if is_relative "$link"
-    then
-        link="$relprefix$link"
-    fi
-    linkentry="$(grep "^$link" linkmap.list 2>/dev/null)"
-    if [ "$linkentry" = '' ]
-    then
-        tx_paths_to_txids > linkmap.list
-        linkentry="$(grep "^$link" linkmap.list)"
-    fi
-    if [ "$linkentry" = '' ]
-    then
-        echo 'No map for link '"$link" 1>&2
-        echo 'If this is an issue just replace this output and termination with a "continue" statement I suppose.' 1>&2
-        exit -1
-    fi
-    echo "$linkentry"
-done
+link_mutation_sed_script() {
+    cat "$path" | preprocess | filter_links | extract_links | while read link
+    do
+        original_link="$link"
+        if is_relative "$link"
+        then
+            link="$relprefix$link"
+        fi
+        linkentry="$(grep "^$link" linkmap.list 2>/dev/null)"
+        if [ "$linkentry" = '' ]
+        then
+            tx_paths_to_txids > linkmap.list
+            linkentry="$(grep "^$link" linkmap.list)"
+        fi
+        if [ "$linkentry" = '' ]
+        then
+            echo 'No map for link '"$link" 1>&2
+            echo 'If this is an issue just replace this output and termination with a "continue" statement I suppose.' 1>&2
+            exit -1
+        fi
+        txid="${linkentry##* }" # last chunk of text without spaces in it, so spaces in paths shouldn't break it
+        # double quote used for delimiter hopefully works with html situation
+        echo "s\"$original_link\"/$txid\"g;"
+    done
+}
+
+mutate_links() {
+    sed -e "$(link_mutation_sed_script)"
+}
+
+cat "$path" | preprocess | filter_links | mutate_links
+
