@@ -141,14 +141,14 @@ link_mutation_sed_script() {
 }
 
 sedscript="$(mktemp)"
-link_mutation_sed_script > sedscript || {
+if ! link_mutation_sed_script > "$sedscript"
+then
     rm "$sedscript"
     exit -1
-}
+fi
 
 mutate_links() {
     sed -f "$sedscript"
-    cat "$sedscript" 1>&2
     rm "$sedscript"
 }
 
