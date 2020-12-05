@@ -11,12 +11,15 @@ relprefix="$(dirname "$path")/"
 if echo "$path" | grep '/[0-9]*\.html'
 # individual messages end in numbers
 then
-    # remove all links
-    link_removal_sed_match='\(.*\)'
+    # goal: remove all links except attachments.  that means all relative links.
+    link_removal_sed_match='\([^/]*\)'
     preprocess() {
-        # all the links in these documents span lines.
-        # there's a glitch here that preserves the mailto links by incidence.
-        sed '/<A HREF/ {N;s/\n//;}'
+        # these links span lines
+        sed '/\(Previous message\|Next message\) (by [a-z]*): <A HREF/ {N;s/\n//;}'
+    }
+    # we don't want to convert individual message attachment links to txlink paths
+    txlinkof_url() {
+        echo "$1"
     }
 elif echo "$path" | grep '/author\.html' || echo "$path" | grep '/date\.html' || echo "$path" | grep '/subject\.html' || echo "$path" | grep '/thread\.html'
 # month index pages are author.html, date.html, etc
@@ -27,6 +30,9 @@ then
         # a link spans a line here, so it is joined
         sed '/>More info on this list/ {N;s/\n//;}'
     }
+    txlinkof_url() {
+        txlinkof "$@"
+    }
 elif echo "$path" | grep 'mailman/listinfo'
 # listinfo page, has a link to archives index, so should go near top of hierarchy
 then
@@ -34,6 +40,9 @@ then
     link_removal_sed_match='\(.*\)'
     preprocess() {
         sed '/<a href/ {N;s/\n//;}'
+    }
+    txlinkof_url() {
+        txlinkof "$@"
     }
 else
     echo "Don't recognise this kind of path for link mutation" 1>&2
@@ -56,7 +65,7 @@ tx_paths_to_txids() {
 
     # this situation is not presently detected.  but a solution could be to remove the txid component from the output, and pipe it to sort and uniq and verify the linecount is the same.
 
-    for tx in .bsv/tx/*
+    for tx in .bsv/{tx,unbroadcasted}/*
     do
         xxd -r -ps "$tx" | strings
     done | sed -ne 's/.*19iG3WTYSsbyos3uJ733yK4zEioi1FesNU.\(.*\)@\([0-9a-fA-F]*\)/\1 \2/p'
@@ -64,11 +73,12 @@ tx_paths_to_txids() {
 
 txid_for_path() {
     path="$1"
-    entry="$(grep "^$path" linkmap.list 2>/dev/null)"
-    if [ "$entry" = '' ]
+    noregen="$2"
+    entry="$(grep "^$path " linkmap.list || grep "^.$path " linkmap.list)"
+    if [ "$entry" = '' ] && [ "$noregen" == "" ]
     then
         tx_paths_to_txids > linkmap.list
-        entry="$(grep "^$path" linkmap.list 2>/dev/null)"
+        entry="$(grep "^$path " linkmap.list || grep "^.$path " linkmap.list)"
     fi
     echo "${entry##* }" # last chunk of text without spaces in it, so spaces in paths shouldn't break it
 }
@@ -102,13 +112,18 @@ link_mutation_sed_script() {
     cat "$path" | preprocess | filter_links | extract_links | while read link
     do
         # skip mailto links of course
-        if echo "$link" | grep "^mailto:"  2>/dev/null
+        if echo "$link" | grep "^mailto:"  >/dev/null
+        then
+            continue
+        fi
+        # skip wonky protocols
+        if echo "$link" | grep "://" >/dev/null && ! echo "$link" | grep "http://" >/dev/null && ! echo "$link" | grep "https://" >/dev/null
         then
             continue
         fi
 
         original_link="$link"
-        if [ "${link#http://}" != "$link" ] || [ "${link#https://}" != "$link" ]
+        if echo "$link" | grep "https*://" >/dev/null
         then
             # if hostname differs from first pathname component, seems fine to skip mutation
             skip_safely=1
@@ -118,17 +133,20 @@ link_mutation_sed_script() {
         if is_relative "$link"
         then
             link="$relprefix$link"
+            noregen=""
+        else
+            noregen="noregen"
         fi
         link="${link#http://}"
         link="${link#https://}"
-        txid="$(txid_for_path "$(txlinkof "$link")")"
+        txid="$(txid_for_path "$(txlinkof_url "$link")" "$noregen")"
         if [ "$txid" = '' ]
         then
             if ((skip_safely))
             then
                 continue
             fi
-            echo 'No map for link '"$link"' as '"$(txlinkof "$link")" 1>&2
+            echo 'No map for link '"$link"' as '"$(txlinkof_url "$link")" 1>&2
             echo 'Maybe mutate and upload it first?' 1>&2
             echo 'Note, atm this only works if uploading has completed.' 1>&2
             echo 'If this is an issue just replace this output and termination with a "continue" statement I suppose.' 1>&2
