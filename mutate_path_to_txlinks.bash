@@ -62,6 +62,22 @@ tx_paths_to_txids() {
     done | sed -ne 's/.*19iG3WTYSsbyos3uJ733yK4zEioi1FesNU.\(.*\)@\([0-9a-fA-F]*\)/\1 \2/p'
 }
 
+txid_for_path() {
+    path="$1"
+    entry="$(grep "^$path" linkmap.list 2>/dev/null)"
+    if [ "$entry" = '' ]
+    then
+        tx_paths_to_txids > linkmap.list
+        entry="$(grep "^$path" linkmap.list 2>/dev/null)"
+    fi
+    echo "${entry##* }" # last chunk of text without spaces in it, so spaces in paths shouldn't break it
+}
+
+add_reference_to_original() {
+    txid="$(txid_for_path "$path")"
+    sed 's!<[bB][oO][dD][yY][^>]*>!&<i>This page was mutated from <a href="'"/$txid"'">its original content</a> to reduce and change some links that could confuse integrity.</i>!'
+}
+
 is_relative() {
     path="$1"
     # starts without /
@@ -105,25 +121,20 @@ link_mutation_sed_script() {
         fi
         link="${link#http://}"
         link="${link#https://}"
-        linkentry="$(grep "^$(txlinkof "$link")" linkmap.list 2>/dev/null)"
-        if [ "$linkentry" = '' ]
-        then
-            tx_paths_to_txids > linkmap.list
-            linkentry="$(grep "^$(txlinkof "$link")" linkmap.list 2>/dev/null)"
-        fi
-        if [ "$linkentry" = '' ]
+        txid="$(txid_for_path "$(txlinkof "$link")")"
+        if [ "$txid" = '' ]
         then
             if ((skip_safely))
             then
                 continue
             fi
-            echo 'No map for link '"$link" 1>&2
+            echo 'No map for link '"$link"' as '"$(txlinkof "$link")" 1>&2
+            echo 'Maybe mutate and upload it first?' 1>&2
             echo 'Note, atm this only works if uploading has completed.' 1>&2
             echo 'If this is an issue just replace this output and termination with a "continue" statement I suppose.' 1>&2
             echo 'That will skip mutation of missing links.' 1>&2
             exit -1
         fi
-        txid="${linkentry##* }" # last chunk of text without spaces in it, so spaces in paths shouldn't break it
         # double quote used for delimiter hopefully works with html situation
         echo "s\"$original_link\"/$txid\"g;"
     done
@@ -137,11 +148,12 @@ link_mutation_sed_script > sedscript || {
 
 mutate_links() {
     sed -f "$sedscript"
+    cat "$sedscript" 1>&2
     rm "$sedscript"
 }
 
 output="$(txlinkof "$path")"
 
-cat "$path" | preprocess | filter_links | mutate_links > "$output"
+cat "$path" | preprocess | filter_links | mutate_links | add_reference_to_original > "$output"
 
 echo "Made $output"
