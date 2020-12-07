@@ -40,7 +40,7 @@ done
 # install bsvup
 if ! [ -e node_modules/bsvup ]
 then
-    npm install git+https://github.com/monkeylord/bsvup\#0c0cf2842414ffffd7a4a6222c2d04f38cf1a15e
+    npm install git+https://github.com/xloem/bsvup\#b388d69da516f151f3979b734a3b9a9fe7a95af5
 fi
 BSVUP=node_modules/.bin/bsvup
 
@@ -48,15 +48,16 @@ echo
 read -s -p 'A password: ' password
 echo
 
-# not sure whether bsvup needs a patch to return an exit code for insufficient balance.
+# https://github.com/monkeylord/bsvup/pull/35 makes bsvup exit with failure for insufficient balance, which will make this script terminate early in that case
 "$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload
 
 # we'll also want to upload the attachments here.  They can be moved into a temporary folder to work around the present bugs.
+rm -rf tmp/"$attachmentsfolder" 2>/dev/null
 mkdir -p tmp/"$attachmentsfolder"
 cp -va "$attachmentsfolder"/"$year""$month"* "$attachmentsfolder"/"$year""$monthprev"* "$attachmentsfolder"/"$year""$monthnext"* tmp/"$attachmentsfolder"
 "$BSVUP" --file tmp/"$attachmentsfolder" --subdirectory "$attachmentsfolder" --password "$password" --rate 500 upload #--broadcast upload
 
-# this hack stores a file pairing paths with psv transactions
+# this hack stores a file pairing paths with bsv transactions
 ./update_linkmap_from_bsvup.bash
 
 # mutate all the message files to use transaction links to attachments
@@ -64,9 +65,15 @@ for mailhtmlfile in $mailhtmlfiles
 do
     ./mutate_path_to_txlinks.bash "$mailhtmlfile"
 done
-# currently working on updating mutator to add links to the raw emails
 
 # upload the mutated message files
-#"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
+"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload
 
-# next: mutate the index files to use transaction links to messages
+# mutate the index files to use transaction links to messages
+for index in thread date subject author
+do
+    ./mutate_path_to_txlinks.bash "$folder"/"$index".html
+done
+
+# upload the mutated index files
+"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload

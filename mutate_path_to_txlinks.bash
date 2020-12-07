@@ -15,10 +15,12 @@ then
     link_removal_sed_match='\([^/]*\)'
     preprocess() {
         rawmail="https://${path%.html}.txt"
+        number="${path%.html}"
+        number="${number##*/}"
         # these links span lines
         sed '/\(Previous message\|Next message\) (by [a-z]*): <A HREF/ {N;s/\n//;}' |
         # we can add a link to the raw message
-        sed 's!<[bB][oO][dD][yY][^>]*>!&<br/><i>This was an html rendering of an <a href="'"$rawmail"'">original raw plaintext email</a>.</i>!'
+        sed 's!<[bB][oO][dD][yY][^>]*>!&<br/><i>This was an html rendering of an <a href="'"$rawmail"'">original raw plaintext email</a> numbered '"$number"'.</i>!'
     }
     # we don't want to convert individual message attachment links to txlink paths
     txlinkof_url() {
