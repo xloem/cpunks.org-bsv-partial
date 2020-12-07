@@ -1,18 +1,33 @@
 #!/usr/bin/env bash
 set -e # failure of any command fails the script immediately
 
-year=2020
-month=9
-timestamp="$(date --date=$year-$month-15 +%s)"
+date=1993-7
+
+timestamp="$(date --date="$date"-15 +%s 2>/dev/null || date --date="$date"/15 +%s 2>/dev/null || date --date="${date% *} 15 ${date#* }" +%s 2>/dev/null || date --date="${date%/*}/15/${date#*/}" +%s 2>/dev/null || date --date="$date" +%s)"
+year="$(date --date=@$timestamp +%Y)"
 month="$(date --date=@$timestamp +%m)"
+
+echo
+echo "Pursuing archival of $year-$month"
+echo
+
 monthprev="$(date --date=@$((timestamp-60*60*24*30)) +%m)"
 monthnext="$(date --date=@$((timestamp+60*60*24*30)) +%m)"
 monthname="$(date --date=@$timestamp +%B)"
-folder=lists.cpunks.org/pipermail/cypherpunks/$year-$monthname
-attachmentsfolder=lists.cpunks.org/pipermail/cypherpunks/attachments
+password=''
+
+for list in cypherpunks cypherpunks-legacy
+do # this is the only unindented block
+
+folder=lists.cpunks.org/pipermail/$list/$year-$monthname
+attachmentsfolder=lists.cpunks.org/pipermail/$list/attachments
 
 # download from server
-wget --no-parent --mirror https://"$folder".txt.gz https://"$folder/"
+if ! wget --mirror https://"$folder".txt.gz
+then
+    continue
+fi
+wget --no-parent --mirror https://"$folder"/
 
 
 # calculate mailfile numbers and paths
@@ -45,17 +60,22 @@ fi
 BSVUP=node_modules/.bin/bsvup
 
 echo
-read -s -p 'A password: ' password
-echo
+echo "Uploading $year-$month"
+if [ "$password" = '' ]
+then
+    echo
+    read -s -p 'A password, to decrypt this private key for payment: ' password
+    echo
+fi
 
-# https://github.com/monkeylord/bsvup/pull/35 makes bsvup exit with failure for insufficient balance, which will make this script terminate early in that case
-"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload
+# presently need bsvup git in order to exit with failure for insufficient balance, which will make this script terminate early in that case
+"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
 
 # we'll also want to upload the attachments here.  They can be moved into a temporary folder to work around the present bugs.
 rm -rf tmp/"$attachmentsfolder" 2>/dev/null
 mkdir -p tmp/"$attachmentsfolder"
-cp -va "$attachmentsfolder"/"$year""$month"* "$attachmentsfolder"/"$year""$monthprev"* "$attachmentsfolder"/"$year""$monthnext"* tmp/"$attachmentsfolder"
-"$BSVUP" --file tmp/"$attachmentsfolder" --subdirectory "$attachmentsfolder" --password "$password" --rate 500 upload #--broadcast upload
+cp -va "$attachmentsfolder"/"$year""$month"* "$attachmentsfolder"/"$year""$monthprev"* "$attachmentsfolder"/"$year""$monthnext"* tmp/"$attachmentsfolder" || true
+"$BSVUP" --file tmp/"$attachmentsfolder" --subdirectory "$attachmentsfolder" --password "$password" --rate 500 --broadcast upload
 
 # this hack stores a file pairing paths with bsv transactions
 ./update_linkmap_from_bsvup.bash
@@ -67,7 +87,10 @@ do
 done
 
 # upload the mutated message files
-"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload
+"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
+
+# update mapfile
+./update_linkmap_from_bsvup.bash
 
 # mutate the index files to use transaction links to messages
 for index in thread date subject author
@@ -76,4 +99,6 @@ do
 done
 
 # upload the mutated index files
-"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 upload #--broadcast upload
+"$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
+
+done # the only unindented block, a while loop over lists

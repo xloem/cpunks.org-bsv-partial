@@ -18,7 +18,8 @@ then
         number="${path%.html}"
         number="${number##*/}"
         # these links span lines
-        sed '/\(Previous message\|Next message\) (by [a-z]*): <A HREF/ {N;s/\n//;}' |
+        sed '/<LI>\(Previous message\|Next message\)[a-z ():]*<A HREF="[0-9][0-9][0-9][0-9][0-9][0-9].html/ {N;s/\n/ /;}' |
+        sed '/>More information about the [-a-zA-Z0-9]*$/ {N;s/\n/ /;}' |
         # we can add a link to the raw message
         sed 's!<[bB][oO][dD][yY][^>]*>!&<br/><i>This was an html rendering of an <a href="'"$rawmail"'">original raw plaintext email</a> numbered '"$number"'.</i>!'
     }
@@ -33,7 +34,7 @@ then
     link_removal_sed_match='\([^0-9].*\)'
     preprocess() {
         # a link spans a line here, so it is joined
-        sed '/>More info on this list/ {N;s/\n//;}'
+        sed '/>More info on this list/ {N;s/\n/ /;}'
     }
     txlinkof_url() {
         txlinkof "$@"
