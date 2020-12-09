@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+
+bsv = require('bsv')
+fs = require('fs')
+
+keys = {}
+
+for (let txfilename of fs.readdirSync('.').filter(fn => fn.match(/\.txs$/)).sort().reverse()) {
+    for (let txhex of JSON.parse(fs.readFileSync(txfilename)).reverse()) {
+        tx = bsv.Transaction(txhex)
+        for (let output of tx.outputs) {
+            datas = output.script.getData();
+            if (datas[0].toString() == '19iG3WTYSsbyos3uJ733yK4zEioi1FesNU') {
+                key = datas[1].toString()
+                if (keys[key]) {
+                    tx = null
+                    break
+                } else {
+                    console.log(key)
+                    keys[key] = tx.id
+                }
+            }
+        }
+        if (tx === null) {
+            continue
+        }
+        console.log(tx.id)
+        fs.writeFileSync('.bsv/tx/' + tx.id, tx.toString())
+    }
+}
+

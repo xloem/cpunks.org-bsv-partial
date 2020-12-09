@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+mailparser = require('mailparser')
+fs = require('fs')
+path = require('path')
+
+folder = process.argv[2]
+filere = process.argv[3]
+
+//folder = '$mboxfolder'
+//filere = new RegExp('mbox-tmp-[0-9]*$')
+async function main() {
+    console.log('start move mails')
+    filenames = fs.readdirSync(folder)
+    console.log('read ' + filenames.length + ' filenames')
+    for (index = 0; index < filenames.length; ++ index) {
+        filename = filenames[index]
+        if (! filename.match(filere)) {
+            console.log('skipping ' + filename)
+            continue
+        }
+        srcfilename = path.join(folder, filename)
+        email = fs.readFileSync(srcfilename)
+        result = await mailparser.simpleParser(email)
+        mtime = result.date.getTime() / 1000
+        muserhost = result.from.value[0].address.replace('@', '_')
+        if (muserhost == '') {
+            muserhost = result.from.value[0].name.replace(' at ', '_')
+        }
+        if (muserhost == '') {
+            throw('failed to extract email from ' + srcfilename)
+        }
+        dstfilename = path.join(folder, '' + mtime + '_' + muserhost + '.txt')
+        console.log(srcfilename + ' -> ' + dstfilename)
+        fs.renameSync(srcfilename, dstfilename)
+    }
+}
+main()

@@ -12,16 +12,18 @@ if echo "$path" | grep '/[0-9]*\.html'
 # individual messages end in numbers
 then
     # goal: remove all links except attachments.  that means all relative links.
-    link_removal_sed_match='\([^/]*\)'
+    # we'll also remove the listinfo link
+    link_removal_sed_match='\([^\/]*\|.*\/listinfo\/.*\)'
     preprocess() {
-        rawmail="https://${path%.html}.txt"
+        txtmail="https://${path%.html}.txt"
+        rawmail="https://${path%.html}.eml.txt"
         number="${path%.html}"
         number="${number##*/}"
         # these links span lines
         sed '/<LI>\(Previous message\|Next message\)[a-z ():]*<A HREF="[0-9][0-9][0-9][0-9][0-9][0-9].html/ {N;s/\n/ /;}' |
         sed '/>More information about the [-a-zA-Z0-9]*$/ {N;s/\n/ /;}' |
         # we can add a link to the raw message
-        sed 's!<[bB][oO][dD][yY][^>]*>!&<br/><i>This was an html rendering of an <a href="'"$rawmail"'">original raw plaintext email</a> numbered '"$number"'.</i>!'
+        sed 's!<[bB][oO][dD][yY][^>]*>!&<br/><i>This was an html rendering of the <a href="'"$txtmail"'">plaintext</a> from\nan <a href="'"$rawmail"'">original raw email</a> numbered '"$number"'.</i>!'
     }
     # we don't want to convert individual message attachment links to txlink paths
     txlinkof_url() {
@@ -91,7 +93,7 @@ txid_for_path() {
 
 add_reference_to_original() {
     txid="$(txid_for_path "$path")"
-    sed 's!<[bB][oO][dD][yY][^>]*>!&<i>This page was mutated from <a href="'"/$txid"'">its original content</a> to reduce and change some links that could confuse integrity.</i>!'
+    sed 's!<[bB][oO][dD][yY][^>]*>!&<i>This page was mutated from <a href="'"/$txid"'">its original content</a> to link to blockchain transactions by hash.</i>!'
 }
 
 is_relative() {
@@ -170,6 +172,7 @@ then
     rm "$sedscript"
     exit -1
 fi
+cat "$sedscript"
 
 mutate_links() {
     sed -f "$sedscript"

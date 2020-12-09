@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -e # failure of any command fails the script immediately
 
-date=1993-7
+#date=1993-7
+date="$*"
 
 timestamp="$(date --date="$date"-15 +%s 2>/dev/null || date --date="$date"/15 +%s 2>/dev/null || date --date="${date% *} 15 ${date#* }" +%s 2>/dev/null || date --date="${date%/*}/15/${date#*/}" +%s 2>/dev/null || date --date="$date" +%s)"
 year="$(date --date=@$timestamp +%Y)"
@@ -14,20 +15,24 @@ echo
 monthprev="$(date --date=@$((timestamp-60*60*24*30)) +%m)"
 monthnext="$(date --date=@$((timestamp+60*60*24*30)) +%m)"
 monthname="$(date --date=@$timestamp +%B)"
-password=''
 
-for list in cypherpunks cypherpunks-legacy
+for listandstartnum in "cypherpunks 015544" "cypherpunks-legacy 000362"
 do # this is the only unindented block
+
+list="${listandstartnum% *}"
+startnum="${listandstartnum#* }"
 
 folder=lists.cpunks.org/pipermail/$list/$year-$monthname
 attachmentsfolder=lists.cpunks.org/pipermail/$list/attachments
+mboxfile=lists.cpunks.org/pipermail/${list}.mbox/${list}.mbox
 
 # download from server
 if ! wget --mirror https://"$folder".txt.gz
 then
     continue
 fi
-wget --no-parent --mirror https://"$folder"/
+### commented out to speed up debugging
+### wget --no-parent --mirror https://"$folder"/
 
 
 # calculate mailfile numbers and paths
@@ -38,19 +43,49 @@ firstmailnum="$(expr "${firstmailnum%.html}" + 0)"
 mailhtmlcount="$(echo "$mailhtmlfiles" | wc -l)"
 
 # download attachments
-sed -ne 's/.*HREF="\([^"]*\/attachments\/[0-9][0-9]*\/[^"]*\)".*/\1/p' $mailhtmlfiles | xargs wget --mirror
+### commented out to speed up debugging
+### sed -ne 's/.*HREF="\([^"]*\/attachments\/[0-9][0-9]*\/[^"]*\)".*/\1/p' $mailhtmlfiles | xargs wget --mirror
 
-# extract raw emails
+# extract new raw emails
+./update_mbox.bash "$mboxfile"
+
+# extract text emails
 zcat "$folder".txt.gz | csplit --elide-empty-files --digits 6 --prefix "$folder/" --suffix-format="extracted-%06d.txt" - '/^From .*[0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9][0-9][0-9]/' '{*}'
-mailtxtcount="$(ls "$folder"/extracted-??????.txt | wc -l)"
+./mbox_extracted_rename.nodejs "$folder" 'extracted-[0-9]*.txt'
 
-# shift raw email numbers to match
-for mailtxtfile in "$folder"/extracted-??????.txt
+# match raw and text emails with the email numbers
+mboxfolder="$(dirname "$mboxfile")"
+for mailhtmlfile in $mailhtmlfiles
 do
-    num="${mailtxtfile##*/extracted-}"
-    num="$(expr "${num%.txt}" + 0 || true)" # expr removes leading 0s during addition
-    mv "$mailtxtfile" "$folder"/"$(printf %06d $((num + firstmailnum)))".txt -v
+    mailemlfile="${mailhtmlfile%.html}.eml.txt"
+    mailtxtfile="${mailhtmlfile%.html}.txt"
+    # extract time and author from html
+    maildate="$(sed -ne 's!.*<I>\([^<]* [0-9][0-9][0-9][0-9]\)</I>.*!\1!p' "$mailhtmlfile" | head -n 1)"
+    maildate="$(date --date "$maildate" +%s)"
+    mailfrom="$(sed -ne 's!.*TITLE=.*>\(.*\) at \(.*\)$!\1_\2!p' "$mailhtmlfile" | head -n 1)"
+    mv -v "$folder"/"$maildate"_"$mailfrom".txt  "$mailtxtfile"
+    srcfile="$mboxfolder"/"$maildate"_"$mailfrom".txt
+    if [ -e "$mailemlfile" ] && ! [ -e "$srcfile" ]
+    then
+        continue
+    fi
+    mv -v "$mboxfolder"/"$maildate"_"$mailfrom".txt "$mailemlfile"
 done
+
+# # renumber text emails to match html emails
+# for mailhtmlfile in $mailhtmlfiles
+# do
+#     mailtxtfile="${mailhtmlfile%.html}.txt"
+#     num="${mailhtmlfile##*/}"
+#     num="$(expr "${num%.html}" + 0 || true)" # expr removes leading 0s during addition
+#     extracted="$(ls "$folder"/extracted-??????.txt | head -n 1)"
+#     mv -v "$extracted" "$mailtxtfile"
+# done
+# for extracted in "$folder"/extracted-??????.txt
+# do
+#     num=$((num+1))
+#     mv -v "$extracted" "$folder"/"$(printf %06d $((num)))".txt
+# done
 
 # install bsvup
 if ! [ -e node_modules/bsvup ]
@@ -72,13 +107,15 @@ fi
 "$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
 
 # we'll also want to upload the attachments here.  They can be moved into a temporary folder to work around the present bugs.
-rm -rf tmp/"$attachmentsfolder" 2>/dev/null
+rm -rf tmp/"$attachmentsfolder" 2>/dev/null || true
 mkdir -p tmp/"$attachmentsfolder"
 cp -va "$attachmentsfolder"/"$year""$month"* "$attachmentsfolder"/"$year""$monthprev"* "$attachmentsfolder"/"$year""$monthnext"* tmp/"$attachmentsfolder" || true
 "$BSVUP" --file tmp/"$attachmentsfolder" --subdirectory "$attachmentsfolder" --password "$password" --rate 500 --broadcast upload
 
-# this hack stores a file pairing paths with bsv transactions
-./update_linkmap_from_bsvup.bash
+# hacks to store a file pairing paths with bsv transactions
+rm -rf .bsv/tx/. 2>/dev/null || true # wipe stale links
+./regenerate_tx_cache_from_txs_files.nodejs # produce new links
+./update_linkmap_from_bsvup.bash # output
 
 # mutate all the message files to use transaction links to attachments
 for mailhtmlfile in $mailhtmlfiles
@@ -102,3 +139,6 @@ done
 "$BSVUP" --file "$folder" --subdirectory "$folder" --password "$password" --rate 500 --broadcast upload
 
 done # the only unindented block, a while loop over lists
+
+# update mapfile
+./update_linkmap_from_bsvup.bash
