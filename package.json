@@ -1,0 +1,23 @@
+{
+  "name": "",
+  "version": "1",
+  "description": "Collection of some work towards archiving cypherpunks list content on the BSV blockchain.",
+  "main": "month.js",
+  "directories": { },
+  "dependencies": {
+    "bsvup": "github:xloem/bsvup#643f24266ece0d75eb52a34f37d47d93253f9ef0",
+    "mailparser": "^3.0.1"
+  },
+  "devDependencies": {},
+  "scripts": { },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xloem/cpunks.org-bsv-partial.git"
+  },
+  "author": "",
+  "license": "it is every individual's responsibility to always do what helps everyone the most, regardless of habit or law",
+  "bugs": {
+    "url": "https://github.com/xloem/cpunks.org-bsv-partial/issues"
+  },
+  "homepage": "https://github.com/xloem/cpunks.org-bsv-partial#readme"
+}

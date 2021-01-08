@@ -27,7 +27,7 @@ attachmentsfolder=lists.cpunks.org/pipermail/$list/attachments
 mboxfile=lists.cpunks.org/pipermail/${list}.mbox/${list}.mbox
 
 # download from server
-if ! wget --mirror https://"$folder".txt.gz
+if ! wget --mirror https://"$folder".txt.gz && ! wget --mirror https://"$folder".txt
 then
     continue
 fi
@@ -50,7 +50,7 @@ mailhtmlcount="$(echo "$mailhtmlfiles" | wc -l)"
 ./update_mbox.bash "$mboxfile"
 
 # extract text emails
-zcat "$folder".txt.gz | csplit --elide-empty-files --digits 6 --prefix "$folder/" --suffix-format="extracted-%06d.txt" - '/^From .*[0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9][0-9][0-9]/' '{*}'
+{ zcat "$folder".txt.gz || cat "$folder".txt; } | csplit --elide-empty-files --digits 6 --prefix "$folder/" --suffix-format="extracted-%06d.txt" - '/^From .*[0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9] [0-9][0-9][0-9][0-9]/' '{*}'
 ./mbox_extracted_rename.nodejs "$folder" 'extracted-[0-9]*.txt'
 
 # match raw and text emails with the email numbers
