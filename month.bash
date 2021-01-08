@@ -90,7 +90,7 @@ done
 # install bsvup
 if ! [ -e node_modules/bsvup ]
 then
-    npm install git+https://github.com/xloem/bsvup\#b388d69da516f151f3979b734a3b9a9fe7a95af5
+    npm install git+https://github.com/xloem/bsvup\#643f24266ece0d75eb52a34f37d47d93253f9ef0
 fi
 BSVUP=node_modules/.bin/bsvup
 
